@@ -1,0 +1,294 @@
+{% extends "purpleBackupApp/base.html" %}
+{% block title %}{{ bucket.display_name|default:bucket.name }} — PurpleBackup{% endblock %}
+
+{% block content %}
+<section>
+  <style>
+    /* Dashboard-style Stats */
+    .stats {
+      display: flex;
+      gap: 2rem;
+      margin: 1.75rem 0;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
+
+    .card {
+      background: linear-gradient(135deg, #e6e6fac9, #f5f3ff16);
+      border-radius: 14px;
+      padding: 1rem;
+      min-width: 140px;
+      height: auto;
+      box-shadow: 0 3px 8px rgba(107, 33, 168, 0.12);
+      flex: 0 0 auto;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      text-align: center;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px rgba(107, 33, 168, 0.18);
+    }
+
+    .card strong {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #49416D;
+    }
+
+    .stat-value {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #49416D;
+      margin-top: 0.5rem;
+      letter-spacing: -0.5px;
+    }
+
+    .actions-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .search-form {
+      display: flex;
+      flex: 1;
+      max-width: 800px;
+      gap: 1rem;
+    }
+
+    .search-form input {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+
+    .search-form input:focus {
+      outline: none;
+      border-color: #6B21A8;
+      box-shadow: 0 0 0 3px rgba(107, 33, 168, 0.1);
+    }
+
+    .backup-buttons {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      background: #6B21A8;
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    .btn:hover { opacity: 0.9; }
+    .btn.secondary {
+      background: #e2e8f0;
+      color: #0b1220;
+    }
+
+    #backup-progress {
+      display: none;
+      padding: 1rem;
+      background: #f1f5f9;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+
+    .filetree-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .filetree-item {
+      padding: 1rem;
+      border-bottom: 1px solid #eaeaea;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-radius: 8px;
+      transition: background-color 0.2s;
+    }
+
+    .filetree-item:hover {
+      background-color: #f8fafc;
+    }
+
+    .bucket-link {
+      font-weight: 600;
+      font-size: 1em;
+      color: #5a2a83;
+      text-decoration: none;
+      transition: color 0.1s ease;
+    }
+    .bucket-link:hover { color: #7e4dbb; text-decoration: underline; }
+
+    h2 { color: #49416D; margin-bottom: 0.5rem; }
+    .muted { color: #64748b; font-size: 0.95rem; }
+  </style>
+
+  <h2>Bucket Contents</h2>
+  <p class="muted">Bucket: <code>{{ bucket.name }}</code></p>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="card">
+      <strong>Total Objects</strong>
+      <div class="stat-value">{{ total_objects }}</div>
+    </div>
+    <div class="card">
+      <strong>Total Data</strong>
+      <div class="stat-value">
+        {% if total_data %}{{ total_data_hr }}{% else %}0.00 MB{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <strong>Last Backup</strong>
+      <div class="stat-value">
+        {% if bucket.last_backup_at %}
+          {{ bucket.last_backup_at|timesince }} ago
+        {% else %}Never{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions-container">
+    <form method="get" action="{% url 'search_files' %}" class="search-form">
+      <input type="text" name="q" placeholder="Search files in bucket..." value="{{ request.GET.q }}">
+      <input type="hidden" name="bucket_id" value="{{ bucket.id }}">
+      <button type="submit" class="btn secondary">Search</button>
+    </form>
+
+    <div class="backup-buttons">
+      <button id="trigger-backup-btn" class="btn">Backup Now</button>
+      <button id="stop-backup-btn" class="btn secondary">Stop Backup</button>
+    </div>
+  </div>
+
+  <!-- Backup progress -->
+  <div id="backup-progress"></div>
+
+  <!-- Files & Folders List -->
+  <!-- Files & Folders List -->
+<div id="file-tree">
+  {% if subfolders or files_qs %}
+    <ul class="filetree-list">
+      {% for folder in subfolders %}
+        <li class="filetree-item">
+          📁 
+          <a href="?folder={{ current_folder }}{% if current_folder %}/{{ folder }}{% else %}{{ folder }}{% endif %}" class="bucket-link">
+            {{ folder }}
+          </a>
+        </li>
+      {% endfor %}
+
+      {% for file in files_qs %}
+        <li class="filetree-item">
+          📄 
+          <a href="{% url 'serve_file' file.id %}" target="_blank" class="bucket-link">
+            {{ file.filename }}
+
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">No files found in this folder.</p>
+  {% endif %}
+</div>
+
+
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const progressDiv = document.getElementById("backup-progress");
+let statusCheckInterval = null;
+
+// Format bytes to human-readable sizes
+function formatSize(bytes) {
+    if (!bytes) return "0 B";
+    const kb = bytes / 1024, mb = kb / 1024, gb = mb / 1024, tb = gb / 1024;
+    if (bytes < 1024) return `${bytes} B`;
+    else if (kb < 1024) return `${kb.toFixed(2)} KB`;
+    else if (mb < 1024) return `${mb.toFixed(2)} MB`;
+    else if (gb < 1024) return `${gb.toFixed(2)} GB`;
+    return `${tb.toFixed(2)} TB`;
+}
+
+// Trigger Backup
+document.getElementById("trigger-backup-btn").addEventListener("click", () => {
+    progressDiv.style.display = "block";
+    progressDiv.innerHTML = "<p>Starting backup...</p>";
+    document.getElementById("trigger-backup-btn").disabled = true;
+
+    fetch("{% url 'trigger_backup' bucket.id %}", {
+        method: "POST",
+        headers: { "X-CSRFToken": "{{ csrf_token }}", "X-Requested-With": "XMLHttpRequest" }
+    })
+    .then(r => r.json())
+    .then(data => {
+        progressDiv.innerHTML = "";
+        if (data.task_id) {
+            const statusDiv = document.createElement("div");
+            statusDiv.innerText = "Backup started (task id: " + data.task_id + ")";
+            progressDiv.appendChild(statusDiv);
+            statusCheckInterval = setInterval(() => {
+                fetch("/backup/status/" + data.task_id + "/")
+                .then(r => r.json())
+                .then(statusData => {
+                    statusDiv.innerText = statusData.status || JSON.stringify(statusData);
+                    if (statusData.status === "Backup completed" || statusData.status === "Backup failed") {
+                        clearInterval(statusCheckInterval);
+                        document.getElementById("trigger-backup-btn").disabled = false;
+                        setTimeout(() => location.reload(), 2000);
+                    }
+                })
+                .catch(err => {
+                    statusDiv.innerText = "Error checking status";
+                    clearInterval(statusCheckInterval);
+                    document.getElementById("trigger-backup-btn").disabled = false;
+                });
+            }, 2000);
+        } else {
+            progressDiv.innerHTML = "<p>Failed to trigger backup</p>";
+            document.getElementById("trigger-backup-btn").disabled = false;
+        }
+    })
+    .catch(err => {
+        progressDiv.innerHTML = "<p>AJAX error: " + err + "</p>";
+        document.getElementById("trigger-backup-btn").disabled = false;
+    });
+});
+
+// Stop Backup
+document.getElementById("stop-backup-btn").addEventListener("click", () => {
+    fetch("{% url 'stop_backup' bucket.id %}", {
+        method: "POST",
+        headers: { "X-CSRFToken": "{{ csrf_token }}", "X-Requested-With": "XMLHttpRequest" }
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert("Backup stop requested: " + data.status);
+        if (statusCheckInterval) clearInterval(statusCheckInterval);
+        document.getElementById("trigger-backup-btn").disabled = false;
+        progressDiv.style.display = "none";
+    })
+    .catch(err => { alert("Error stopping backup: " + err); });
+});
+</script>
+{% endblock %}

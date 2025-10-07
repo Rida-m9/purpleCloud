@@ -1,0 +1,50 @@
+{% extends "purpleBackupApp/base.html" %}
+
+{% block title %}Search Results — PurpleBackup{% endblock %}
+
+{% block content %}
+<div class="search-results-container">
+    <h2>Search Results</h2>
+    <p class="query-info">Found {{ files|length }} result(s) for "{{ query }}"</p>
+
+    <div class="file-results">
+        {% for f in files %}
+        <a href="{% url 'serve_file' f.id %}" target="_blank" rel="noopener" class="file-card-link">
+            <div class="file-card">
+                <div class="file-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M14 2H6C4.9 2 4.01 2.9 4.01 4L4 20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2Z" fill="#7E57C2"/>
+                        <path d="M14 2V8H20" fill="#5E35B1"/>
+                        <path d="M16 13H8V11H16V13ZM16 17H8V15H16V17ZM13 9H8V7H13V9Z" fill="white"/>
+                    </svg>
+                </div>
+                <div class="file-info">
+                    <h3 class="file-name">{{ f.wasabi_key|truncatechars:40 }}</h3>
+                    <p class="file-meta">Bucket: {{ f.bucket.name }} • {{ f.size|filesizeformat }}</p>
+                </div>
+            </div>
+        </a>
+        {% empty %}
+        <div class="no-results">
+            <h3>No files found</h3>
+            <p>No files matched your query "{{ query }}"</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+.search-results-container { max-width: 800px; margin: 0 auto; padding: 20px; }
+.query-info { color: #7b7b7b; margin-bottom: 25px; }
+.file-results { display: flex; flex-direction: column; gap: 12px; }
+.file-card-link { display: flex; text-decoration: none; color: inherit; }
+.file-card { display: flex; align-items: center; background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: box-shadow 0.2s ease, transform 0.1s ease; width: 100%; }
+.file-card:hover { box-shadow: 0 6px 14px rgba(123, 104, 238, 0.3); transform: translateY(-2px); }
+.file-icon { margin-right: 16px; flex-shrink: 0; pointer-events: none; }
+.file-info { flex-grow: 1; min-width: 0; pointer-events: none; }
+.file-name { margin: 0 0 4px 0; font-size: 16px; font-weight: 500; color: #4a00e0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-meta { margin: 0; font-size: 14px; color: #7b7b7b; }
+.no-results { text-align: center; padding: 40px 20px; color: #7b7b7b; }
+.no-results h3 { margin: 16px 0 8px 0; color: #5a5a5a; }
+</style>
+{% endblock %}

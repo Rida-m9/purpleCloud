@@ -1,0 +1,70 @@
+{% extends "purpleBackupApp/base.html" %}
+{% block title %}Folder {{ folder_name }} — PurpleBackup{% endblock %}
+
+{% block content %}
+<section>
+  <h2>Folder: {{ folder_name }}</h2>
+  <p>Total files: {{ total_objects }}, Total size: {{ total_data_hr }}</p>
+
+  <div id="file-tree"></div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const hierarchy = {{ hierarchy|safe }};
+const root = document.getElementById("file-tree");
+
+function formatSize(bytes) {
+    if (!bytes) return "0 B";
+    const kb = bytes / 1024, mb = kb / 1024, gb = mb / 1024, tb = gb / 1024;
+    if (bytes < 1024) return `${bytes} B`;
+    else if (kb < 1024) return `${kb.toFixed(2)} KB`;
+    else if (mb < 1024) return `${mb.toFixed(2)} MB`;
+    else if (gb < 1024) return `${gb.toFixed(2)} GB`;
+    return `${tb.toFixed(2)} TB`;
+}
+
+function createNode(name, node) {
+    const li = document.createElement("li");
+    li.style.marginBottom = "6px";
+
+    if (node.wasabi_key) {
+        // File
+        const link = document.createElement("a");
+        link.href = node.url;
+        link.target = "_blank";
+        link.textContent = name + ` (${formatSize(node.size)})`;
+        li.appendChild(link);
+    } else {
+        // Folder
+        const folderName = document.createElement("span");
+        folderName.textContent = name;
+        folderName.style.fontWeight = "bold";
+        li.appendChild(folderName);
+
+        const ul = document.createElement("ul");
+        ul.style.marginLeft = "20px";
+
+        for (const [childName, childNode] of Object.entries(node)) {
+            if (childName !== "_size") {
+                ul.appendChild(createNode(childName, childNode));
+            }
+        }
+        li.appendChild(ul);
+    }
+
+    return li;
+}
+
+if (root && Object.keys(hierarchy).length > 0) {
+    const ulRoot = document.createElement("ul");
+    for (const [name, node] of Object.entries(hierarchy)) {
+        if (name !== "_size") ulRoot.appendChild(createNode(name, node));
+    }
+    root.appendChild(ulRoot);
+} else {
+    root.textContent = "No files in this folder.";
+}
+</script>
+{% endblock %}

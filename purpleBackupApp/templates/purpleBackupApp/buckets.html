@@ -1,0 +1,221 @@
+{% extends "purpleBackupApp/base.html" %}
+{% block title %}Buckets — PurpleBackup{% endblock %}
+
+{% block content %}
+<section>
+  <style>
+    /* Style bucket names */
+    .bucket-link {
+      font-weight: 600;
+      font-size: 1.1em;
+      color: #5a2a83;
+      text-decoration: none;
+      transition: color 0.1s ease;
+    }
+    .bucket-link:hover {
+      color: #7e4dbb;
+      text-decoration: wavy;
+    }
+    
+    /* Elegant separator for bucket items */
+    .bucket-item {
+      padding: 1rem;
+      border-bottom: 1px solid #eaeaea;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-radius: 8px;
+      transition: background-color 0.2s;
+    }
+    
+    .bucket-item:hover {
+      background-color: #f8fafc;
+    }
+    
+    .bucket-item:last-child {
+      border-bottom: none;
+    }
+    
+    .bucket-list {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0;
+    }
+    
+    /* Search and button container */
+    .actions-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    .search-form {
+      display: flex;
+      flex: 1;
+      max-width: 500px;
+      gap: 0.5rem;
+    }
+    
+    .search-form input {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+    
+    /* Section headings */
+    h2 {
+      color: #49416D;
+      margin-bottom: 0.5rem;
+    }
+    
+    /* Button styles */
+    .btn {
+      background: #6B21A8;
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+    
+    .btn.secondary {
+      background: #e2e8f0;
+      color: #0b1220;
+      text-decoration: none;
+    }
+    
+    .btn:hover {
+      opacity: 0.9;
+    }
+    
+    .bucket-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .bucket-icon {
+      font-size: 1.5rem;
+    }
+    
+    .bucket-details {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .bucket-meta {
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+  </style>
+
+  <h2>Buckets</h2>
+  <p class="muted">Manage your backup buckets and initiate backups.</p>
+
+  <!-- Actions row -->
+  <div class="actions-container">
+    <form method="get" action="{% url 'search_files' %}" class="search-form">
+      <input type="text" name="q" placeholder="Search files in buckets...">
+      <button type="submit" class="btn secondary">Search</button>
+    </form>
+    <div>
+      <a href="{% url 'dashboard' %}" class="btn secondary">View Dashboard</a>
+      <form id="backup-all-form" method="post" action="{% url 'trigger_backup_all' %}" style="display: inline-block;">
+        {% csrf_token %}
+        <button type="submit" class="btn">Backup All</button>
+      </form>
+    </div>
+  </div>
+  <div id="backup-progress" style="display:none; margin-top: 1rem; padding: 1rem; background: #f1f5f9; border-radius: 8px;"></div>
+
+  <!-- Buckets List -->
+  <div>
+    {% if buckets %}
+      <ul class="bucket-list">
+        {% for bucket in buckets %}
+          <li class="bucket-item">
+            <div class="bucket-info">
+              <div class="bucket-icon">🗑️</div>
+              <div class="bucket-details">
+                <a href="{% url 'bucket_detail' bucket.id %}" class="bucket-link">
+                  {{ bucket.display_name|default:bucket.name }}
+                </a>
+                <div class="bucket-meta">
+                  Last backup: {% if bucket.last_backup_at %}{{ bucket.last_backup_at|date:"Y-m-d H:i" }}{% else %}Never{% endif %}
+                </div>
+              </div>
+            </div>
+            <form method="post" action="{% url 'trigger_backup' bucket.id %}" class="inline">
+              {% csrf_token %}
+              <button type="submit" class="btn secondary">Backup Now</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No buckets configured yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+<script>
+const form = document.getElementById('backup-all-form');
+const progressDiv = document.getElementById('backup-progress');
+
+if (form) {
+  form.addEventListener('submit', function(e){
+      e.preventDefault();
+      const csrftoken = form.querySelector('input[name="csrfmiddlewaretoken"]').value;
+
+      progressDiv.style.display = 'block';
+      progressDiv.innerHTML = '<p>Starting backup of all buckets...</p>';
+
+      fetch(form.action, {
+          method: 'POST',
+          headers: {'X-CSRFToken': csrftoken},
+      })
+      .then(res => res.json())
+      .then(data => {
+          progressDiv.innerHTML = '';
+          if (data.task_id) {
+              const taskId = data.task_id;
+              const statusDiv = document.createElement('div');
+              statusDiv.innerText = 'Backup started (task id: ' + taskId + ')';
+              progressDiv.appendChild(statusDiv);
+
+              const interval = setInterval(() => {
+                  fetch('/backup/status/' + taskId + '/')
+                      .then(r => r.json())
+                      .then(statusData => {
+                          statusDiv.innerText = statusData.status || JSON.stringify(statusData);
+                          if(statusData.status === 'Backup completed' || statusData.status === 'Backup failed'){
+                              clearInterval(interval);
+                              // Reload the page to show updated status
+                              setTimeout(() => { location.reload(); }, 2000);
+                          }
+                      })
+                      .catch(err => {
+                          statusDiv.innerText = 'Error checking status';
+                          clearInterval(interval);
+                      });
+              }, 2000);
+          } else {
+              progressDiv.innerHTML = '<p>Failed to trigger backup</p>';
+          }
+      })
+      .catch(err => {
+          progressDiv.innerHTML = '<p>AJAX error</p>';
+      });
+  });
+}
+</script>
+{% endblock %}
